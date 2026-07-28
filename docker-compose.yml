@@ -1,0 +1,78 @@
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-zyntra}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-zyntra}
+      POSTGRES_DB: ${POSTGRES_DB:-zyntra}
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-zyntra}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "6379:6379"
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  ml:
+    build: ./ml-service
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+
+  api:
+    build: .
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      ml:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      PORT: 4000
+      API_PREFIX: /api/v1
+      DATABASE_URL: postgresql://${POSTGRES_USER:-zyntra}:${POSTGRES_PASSWORD:-zyntra}@db:5432/${POSTGRES_DB:-zyntra}?schema=public
+      REDIS_URL: redis://redis:6379
+      ML_SERVICE_URL: http://ml:8000
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:?set JWT_ACCESS_SECRET in your .env}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:?set JWT_REFRESH_SECRET in your .env}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000}
+      EXTENSION_ORIGINS: ${EXTENSION_ORIGINS:-}
+      PUBLIC_URL: ${PUBLIC_URL:-http://localhost:4000}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      ANTHROPIC_MODEL: ${ANTHROPIC_MODEL:-claude-sonnet-4-6}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASS: ${SMTP_PASS:-}
+      MAIL_FROM: ${MAIL_FROM:-"Zyntra <no-reply@zyntra.app>"}
+    ports:
+      - "4000:4000"
+    volumes:
+      - avatars:/app/uploads/avatars
+      - documents:/app/uploads/documents
+
+volumes:
+  pgdata:
+  redisdata:
+  avatars:
+  documents:

@@ -1,0 +1,510 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  user
+  admin
+}
+
+enum TokenType {
+  EMAIL_VERIFY
+  PASSWORD_RESET
+}
+
+enum VerificationStatus {
+  VERIFIED
+  PARTIALLY_VERIFIED
+  SECONDARY_SOURCE
+  MODELED
+  UNVERIFIED
+  STALE
+  UNSUPPORTED
+}
+
+model User {
+  id           String     @id @default(cuid())
+  name         String
+  email        String     @unique
+  passwordHash String
+  role         Role       @default(user)
+  status       UserStatus @default(active)
+  verified     Boolean    @default(false)
+  avatarUrl    String?
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  profile           Profile?
+  refreshTokens     RefreshToken[]
+  savedPrograms     SavedProgram[]
+  applications      Application[]
+  notifications     Notification[]
+  documents         Document[]
+  sopDrafts         SopDraft[]
+  pushSubscriptions PushSubscription[]
+  extractionConsent ExtractionConsent?
+  profileDrafts     ProfileDraft[]
+  chatSessions      ChatSession[]
+
+  @@map("users")
+}
+
+model Profile {
+  id                 String   @id @default(cuid())
+  userId             String   @unique
+  degree             String   @default("")
+  institution        String   @default("")
+  cgpa               String   @default("")
+  graduationYear     String   @default("")
+  ielts              String   @default("")
+  toefl              String   @default("")
+  pte                String   @default("")
+  gre                String   @default("")
+  gmat               String   @default("")
+  experience         String   @default("")
+  projects           String[] @default([])
+  certifications     String[] @default([])
+  research           String   @default("")
+  achievements       String   @default("")
+  extracurriculars   String   @default("")
+  leadership         String   @default("")
+  budgetPKR          String   @default("")
+  preferredCountries String[] @default([])
+  preferredPrograms  String[] @default([])
+  careerGoals        String   @default("")
+  updatedAt          DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("profiles")
+}
+
+model RefreshToken {
+  id        String    @id @default(cuid())
+  userId    String
+  tokenHash String    @unique
+  userAgent String?
+  ip        String?
+  expiresAt DateTime
+  revokedAt DateTime?
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("refresh_tokens")
+}
+
+model VerificationToken {
+  id         String    @id @default(cuid())
+  email      String
+  codeHash   String
+  type       TokenType
+  expiresAt  DateTime
+  consumedAt DateTime?
+  createdAt  DateTime  @default(now())
+
+  @@index([email, type])
+  @@index([expiresAt])
+  @@map("verification_tokens")
+}
+
+enum UserStatus {
+  active
+  suspended
+}
+
+enum ApplicationStatus {
+  NOT_STARTED
+  IN_PROGRESS
+  SUBMITTED
+  DECISION_PENDING
+  ACCEPTED
+  REJECTED
+}
+
+enum NotificationKind {
+  deadline
+  status
+  tip
+  scholarship
+  system
+}
+
+model Country {
+  id                String @id @default(cuid())
+  name              String @unique
+  flag              String
+  currency          String
+  pkrRate           Int
+  portal            String
+  livingCostMonthly Int
+
+  universities University[]
+
+  @@map("countries")
+}
+
+model University {
+  id          String @id @default(cuid())
+  countryId   String
+  name        String @unique
+  city        String
+  ranking     Int
+  ieltsMin    Float
+  cgpaMin     Float
+  description String
+
+  country  Country   @relation(fields: [countryId], references: [id], onDelete: Cascade)
+  programs Program[]
+
+  @@index([countryId])
+  @@map("universities")
+}
+
+model Program {
+  id                     String             @id @default(cuid())
+  slug                   String             @unique // stable public id, mirrors the frontend dataset ids
+  universityId           String
+  name                   String
+  degreeLevel            String             @default("Master")
+  degreeType             String             @default("MSc")
+  studyField             String             @default("Computer Science & IT")
+  specialization         String?
+  campus                 String?
+  studyMode              String             @default("Full-time")
+  language               String             @default("English")
+  duration               String             @default("2 Years")
+  applicationMethod      String             @default("Direct Portal")
+  fee                    Int // annual tuition in the country currency
+  deadline               DateTime // next admission deadline (admin-updatable per intake)
+  intakeLabel            String             @default("") // e.g. "Winter 2026", shown with deadlines
+  eligibilitySummary     String?
+  minimumGpa             Float?
+  englishRequirements    String?
+  officialProgramUrl     String?
+  officialApplicationUrl String?
+  sourceUrl              String?
+  sourceTitle            String?
+  lastVerifiedAt         DateTime?
+  verificationStatus     VerificationStatus @default(UNVERIFIED)
+  isActive               Boolean            @default(true)
+  createdAt              DateTime           @default(now())
+  updatedAt              DateTime           @updatedAt
+
+  university   University     @relation(fields: [universityId], references: [id], onDelete: Cascade)
+  applications Application[]
+  saved        SavedProgram[]
+
+  @@unique([universityId, name])
+  @@index([universityId])
+  @@index([deadline])
+  @@map("programs")
+}
+
+model Scholarship {
+  id               String   @id @default(cuid())
+  name             String   @unique
+  country          String
+  flag             String
+  amount           String
+  deadline         DateTime
+  coverage         String // "Full" | "Partial"
+  description      String
+  eligiblePrograms String[]
+
+  @@index([country])
+  @@index([deadline])
+  @@map("scholarships")
+}
+
+model SavedProgram {
+  id        String   @id @default(cuid())
+  userId    String
+  programId String
+  createdAt DateTime @default(now())
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  program Program @relation(fields: [programId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, programId])
+  @@index([userId])
+  @@map("saved_programs")
+}
+
+model Application {
+  id        String            @id @default(cuid())
+  userId    String
+  programId String
+  status    ApplicationStatus @default(NOT_STARTED)
+  createdAt DateTime          @default(now())
+  updatedAt DateTime          @updatedAt
+
+  user      User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  program   Program           @relation(fields: [programId], references: [id], onDelete: Cascade)
+  notes     ApplicationNote[]
+  reminders ReminderSent[]
+
+  @@unique([userId, programId])
+  @@index([userId])
+  @@index([status])
+  @@map("applications")
+}
+
+model ApplicationNote {
+  id            String   @id @default(cuid())
+  applicationId String
+  text          String
+  createdAt     DateTime @default(now())
+
+  application Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+
+  @@index([applicationId])
+  @@map("application_notes")
+}
+
+model ReminderSent {
+  id            String   @id @default(cuid())
+  applicationId String
+  threshold     Int // 30 | 7 | 1 days before deadline
+  sentAt        DateTime @default(now())
+
+  application Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+
+  @@unique([applicationId, threshold])
+  @@map("reminders_sent")
+}
+
+model Notification {
+  id        String           @id @default(cuid())
+  userId    String
+  kind      NotificationKind
+  text      String
+  href      String?
+  read      Boolean          @default(false)
+  createdAt DateTime         @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@map("notifications")
+}
+
+model Document {
+  id          String    @id @default(cuid())
+  userId      String
+  type        String // one of the 7 frontend DOCUMENT_TYPES
+  name        String
+  size        Int
+  mime        String
+  storagePath String
+  expiryDate  DateTime?
+  uploadedAt  DateTime  @default(now())
+
+  user       User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  extraction DocumentExtraction?
+
+  @@index([userId])
+  @@map("documents")
+}
+
+model SopDraft {
+  id         String   @id @default(cuid())
+  userId     String
+  university String
+  program    String
+  content    String
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("sop_drafts")
+}
+
+model PushSubscription {
+  id        String   @id @default(cuid())
+  userId    String
+  endpoint  String   @unique
+  p256dh    String?
+  auth      String?
+  userAgent String?
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("push_subscriptions")
+}
+
+enum AuditAction {
+  CREATE
+  UPDATE
+  DELETE
+  LOGIN
+  LOGOUT
+  STATUS_CHANGE
+  SECURITY
+}
+
+model AuditLog {
+  id         String      @id @default(cuid())
+  actorId    String? // null for anonymous/system events
+  actorEmail String?
+  action     AuditAction
+  entity     String // e.g. "user", "program", "application"
+  entityId   String?
+  summary    String
+  ip         String?
+  userAgent  String?
+  metadata   Json?
+  createdAt  DateTime    @default(now())
+
+  @@index([actorId, createdAt])
+  @@index([entity, createdAt])
+  @@map("audit_logs")
+}
+
+// ── Phase 2: Document Extraction & AI Profile Drafts ──────────────────────────
+
+enum ExtractionStatus {
+  PENDING
+  PROCESSING
+  EXTRACTED
+  OCR_REQUIRED
+  UNSUPPORTED
+  FAILED
+}
+
+model DocumentExtraction {
+  id            String           @id @default(cuid())
+  documentId    String           @unique
+  userId        String
+  status        ExtractionStatus @default(PENDING)
+  extractedText String?          @db.Text
+  textLength    Int              @default(0)
+  pageCount     Int?
+  extractorType String           @default("default")
+  attemptCount  Int              @default(1)
+  errorCode     String?
+  checksum      String?
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+
+  document Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([status])
+  @@map("document_extractions")
+}
+
+model ExtractionConsent {
+  id             String    @id @default(cuid())
+  userId         String    @unique
+  consentVersion String    @default("v1.0")
+  granted        Boolean   @default(true)
+  grantedAt      DateTime  @default(now())
+  revokedAt      DateTime?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("extraction_consents")
+}
+
+enum DraftStatus {
+  DRAFT
+  PARTIALLY_APPLIED
+  APPLIED
+  DISCARDED
+}
+
+enum DraftMode {
+  CLAUDE
+  GROQ
+  LOCAL_RULES
+}
+
+model ProfileDraft {
+  id             String      @id @default(cuid())
+  userId         String
+  status         DraftStatus @default(DRAFT)
+  mode           DraftMode   @default(LOCAL_RULES)
+  provider       String?
+  consentVersion String?
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+  appliedAt      DateTime?
+
+  user        User                     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  suggestions ProfileFieldSuggestion[]
+
+  @@index([userId, status])
+  @@map("profile_drafts")
+}
+
+enum SuggestionState {
+  PENDING
+  ACCEPTED
+  EDITED
+  REJECTED
+  CONFLICT
+}
+
+model ProfileFieldSuggestion {
+  id               String          @id @default(cuid())
+  draftId          String
+  field            String // Canonical field path, e.g. "degree", "cgpa", "ielts"
+  proposedValue    String
+  normalizedValue  String
+  userEditedValue  String?
+  confidence       Float           @default(0.8)
+  sourceDocumentId String?
+  sourceExcerpt    String?         @db.Text
+  page             Int?
+  state            SuggestionState @default(PENDING)
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+
+  draft ProfileDraft @relation(fields: [draftId], references: [id], onDelete: Cascade)
+
+  @@index([draftId])
+  @@index([field])
+  @@map("profile_field_suggestions")
+}
+
+// ── Phase 3: Conversational Counselling Chat ─────────────────────────────────
+
+model ChatSession {
+  id        String   @id @default(cuid())
+  userId    String
+  title     String   @default("Admissions Counselling")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user     User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  messages ChatMessage[]
+
+  @@index([userId, createdAt])
+  @@map("chat_sessions")
+}
+
+model ChatMessage {
+  id        String   @id @default(cuid())
+  sessionId String
+  sender    String // "user" | "assistant"
+  content   String   @db.Text
+  tokens    Int      @default(0)
+  createdAt DateTime @default(now())
+
+  session ChatSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId, createdAt])
+  @@map("chat_messages")
+}

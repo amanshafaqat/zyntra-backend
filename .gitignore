@@ -1,0 +1,41 @@
+# Dependencies and generated output
+node_modules/
+dist/
+coverage/
+npm-cache/
+*.tsbuildinfo
+
+# Environment files (keep safe templates in Git)
+.env
+.env.*
+!.env.example
+!.env.production.example
+
+# Runtime uploads (keep directory placeholders)
+uploads/avatars/*
+!uploads/avatars/.gitkeep
+uploads/documents/*
+!uploads/documents/.gitkeep
+
+# Python/ML artifacts
+ml-service/__pycache__/
+ml-service/.venv/
+
+# Test and temporary output
+test-results/
+playwright-report/
+.cache/
+*.log
+*.tmp
+*.temp
+
+# IDE and operating-system files
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Railway and local tooling state
+.railway/
