@@ -64,15 +64,22 @@ if (!parsed.success) {
   process.exit(1);
 }
 
+function normalizeOrigin(origin: string): string {
+  return origin
+    .trim()
+    .replace(/^["']|["']$/g, "")
+    .replace(/\/+$/, "");
+}
+
 export const env = {
   ...parsed.data,
   isProd: parsed.data.NODE_ENV === "production",
   isDev: parsed.data.NODE_ENV === "development",
   corsOrigins: parsed.data.CORS_ORIGINS.split(",")
-    .map((o) => o.trim())
+    .map(normalizeOrigin)
     .filter(Boolean),
   extensionOrigins: parsed.data.EXTENSION_ORIGINS.split(",")
-    .map((o) => o.trim())
+    .map(normalizeOrigin)
     .filter(Boolean),
   hasClaude: parsed.data.ANTHROPIC_API_KEY.length > 0,
   hasGroq: parsed.data.GROQ_API_KEY.length > 0,
