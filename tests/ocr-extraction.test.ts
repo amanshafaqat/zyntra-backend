@@ -1,8 +1,8 @@
 import { describe, expect, it, beforeAll, afterAll } from "vitest";
 import path from "node:path";
 import fs from "node:fs";
-import { createCanvas } from "canvas";
 import { PDFDocument } from "pdf-lib";
+import sharp from "sharp";
 import { OcrService } from "../src/modules/documents/ocr.service";
 import { DocumentParserService } from "../src/modules/documents/parser.service";
 
@@ -46,17 +46,19 @@ describe("Workstream 2 — OCR & Scanned Document Extraction Tests", () => {
   it("should perform genuine pixel OCR on rendered image files using Tesseract.js", async () => {
     const imgPath = path.join(tmpDir, "scanned_certificate.png");
     
-    // Generate real pixel PNG using canvas
-    const canvas = createCanvas(500, 150);
-    const ctx = canvas.getContext("2d");
-    ctx.fillStyle = "white";
-    ctx.fillRect(0, 0, 500, 150);
-    ctx.fillStyle = "black";
-    ctx.font = "22px Arial";
-    ctx.fillText("CERTIFICATE OF COMPLETION", 30, 40);
-    ctx.fillText("Name: Shehroz Ali  IELTS Score: 7.5", 30, 80);
-
-    const pngBuffer = canvas.toBuffer("image/png");
+    // Render a real pixel PNG using sharp, which is also used in production.
+    const svg = Buffer.from(`
+      <svg width="500" height="150" xmlns="http://www.w3.org/2000/svg">
+        <rect width="500" height="150" fill="white"/>
+        <text x="30" y="40" font-family="Arial, sans-serif" font-size="22" fill="black">
+          CERTIFICATE OF COMPLETION
+        </text>
+        <text x="30" y="80" font-family="Arial, sans-serif" font-size="22" fill="black">
+          Name: Shehroz Ali IELTS Score: 7.5
+        </text>
+      </svg>
+    `);
+    const pngBuffer = await sharp(svg).png().toBuffer();
     fs.writeFileSync(imgPath, pngBuffer);
 
     const res = await OcrService.processFile(imgPath, "image/png");
