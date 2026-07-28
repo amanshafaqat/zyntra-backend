@@ -41,7 +41,22 @@ async function issueTokens(user: UserWithProfile, meta: ClientMeta): Promise<Tok
 export const authService = {
   async register(dto: RegisterDto): Promise<{ email: string }> {
     const existing = await authRepository.findByEmail(dto.email);
-    if (existing) throw ApiError.conflict("An account with this email already exists. Log in instead.");
+    if (existing) {
+      if (existing.verified) {
+        throw ApiError.conflict("An account with this email already exists. Log in instead.");
+      }
+      if (existing.status === "suspended") {
+        throw ApiError.forbidden("This account has been suspended. Contact support.");
+      }
+
+      // Registration may previously have created the account before SMTP
+      // delivery failed. Resume that incomplete flow instead of trapping the
+      // user behind a permanent 409 response.
+      const code = sixDigitCode();
+      await authRepository.issueCode(existing.email, "EMAIL_VERIFY", sha256(code));
+      await mailer.sendVerificationCode(existing.email, existing.name, code);
+      return { email: existing.email };
+    }
 
     const passwordHash = await bcrypt.hash(dto.password, env.BCRYPT_ROUNDS);
     const user = await authRepository.createUser({ name: dto.name, email: dto.email, passwordHash });
