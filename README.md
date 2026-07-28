@@ -152,6 +152,14 @@ Production also requires valid SMTP configuration:
 | `SMTP_PASS` | SMTP password |
 | `MAIL_FROM` | Sender name and address |
 
+On Railway Free, Trial, and Hobby plans, outbound SMTP is disabled. Configure
+`RESEND_API_KEY` instead; the backend will use Resend's HTTPS API and prefer it
+over SMTP when both are present.
+
+If you do not own a custom sending domain, `BREVO_API_KEY` is another HTTPS
+option. Brevo can verify an individual sender address and is preferred after
+Resend but before SMTP.
+
 Optional integrations include:
 
 ```env
@@ -225,6 +233,8 @@ SMTP_SECURE=false
 SMTP_USER=your-smtp-user
 SMTP_PASS=your-smtp-password
 MAIL_FROM="Zyntra <no-reply@yourdomain.com>"
+RESEND_API_KEY=your-resend-api-key
+BREVO_API_KEY=your-brevo-api-key
 ```
 
 Railway supplies `PORT` automatically; do not hardcode it.

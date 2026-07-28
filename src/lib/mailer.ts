@@ -6,7 +6,7 @@ import { logger } from "@/config/logger";
  * SMTP transport when configured; JSON transport otherwise so development
  * works without a mail server (the message, including the code, is logged).
  */
-const transporter: Transporter = env.SMTP_HOST
+const transporter: Transporter | null = env.SMTP_HOST
   ? nodemailer.createTransport({
       host: env.SMTP_HOST,
       port: env.SMTP_PORT,
@@ -16,9 +16,62 @@ const transporter: Transporter = env.SMTP_HOST
       greetingTimeout: 10_000,
       socketTimeout: 15_000,
     })
-  : nodemailer.createTransport({ jsonTransport: true });
+  : env.isDev
+    ? nodemailer.createTransport({ jsonTransport: true })
+    : null;
+
+function configuredSender(): { name: string; email: string } {
+  const match = env.MAIL_FROM.match(/^\s*"?([^"<]*)"?\s*<([^>]+)>\s*$/);
+  return match
+    ? { name: match[1].trim() || "Zyntra", email: match[2].trim() }
+    : { name: "Zyntra", email: env.MAIL_FROM.trim() };
+}
 
 async function send(to: string, subject: string, html: string, text: string): Promise<void> {
+  if (env.hasResend) {
+    const response = await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${env.RESEND_API_KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ from: env.MAIL_FROM, to: [to], subject, html, text }),
+      signal: AbortSignal.timeout(15_000),
+    });
+    if (!response.ok) {
+      const details = await response.text().catch(() => "");
+      throw new Error(`Resend email delivery failed (${response.status}): ${details.slice(0, 300)}`);
+    }
+    logger.info({ to, subject, provider: "resend" }, "Email sent");
+    return;
+  }
+
+  if (env.hasBrevo) {
+    const response = await fetch("https://api.brevo.com/v3/smtp/email", {
+      method: "POST",
+      headers: {
+        "api-key": env.BREVO_API_KEY,
+        Accept: "application/json",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        sender: configuredSender(),
+        to: [{ email: to }],
+        subject,
+        htmlContent: html,
+        textContent: text,
+      }),
+      signal: AbortSignal.timeout(15_000),
+    });
+    if (!response.ok) {
+      const details = await response.text().catch(() => "");
+      throw new Error(`Brevo email delivery failed (${response.status}): ${details.slice(0, 300)}`);
+    }
+    logger.info({ to, subject, provider: "brevo" }, "Email sent");
+    return;
+  }
+
+  if (!transporter) throw new Error("No email delivery provider is configured");
   const info = await transporter.sendMail({ from: env.MAIL_FROM, to, subject, html, text });
   if (!env.SMTP_HOST) {
     logger.info({ to, subject, text }, "Email (dev transport — not delivered)");

@@ -28,6 +28,8 @@ const envSchema = z.object({
   SMTP_USER: z.string().optional().default(""),
   SMTP_PASS: z.string().optional().default(""),
   MAIL_FROM: z.string().default('"Zyntra" <no-reply@zyntra.app>'),
+  RESEND_API_KEY: z.string().optional().default(""),
+  BREVO_API_KEY: z.string().optional().default(""),
 
   UPLOAD_DIR: z.string().default("uploads"),
   MAX_AVATAR_MB: z.coerce.number().positive().default(2),
@@ -84,6 +86,8 @@ export const env = {
   hasClaude: parsed.data.ANTHROPIC_API_KEY.length > 0,
   hasGroq: parsed.data.GROQ_API_KEY.length > 0,
   hasMlService: parsed.data.ML_SERVICE_URL.length > 0,
+  hasResend: parsed.data.RESEND_API_KEY.length > 0,
+  hasBrevo: parsed.data.BREVO_API_KEY.length > 0,
 };
 
 /**
@@ -109,7 +113,9 @@ if (env.isProd) {
     fatal.push("CORS_ORIGINS must use https in production");
   }
   if (!env.PUBLIC_URL.startsWith("https://")) fatal.push("PUBLIC_URL must use https in production");
-  if (!env.SMTP_HOST) fatal.push("SMTP_HOST is required in production (verification emails would be dropped)");
+  if (!env.hasResend && !env.hasBrevo && !env.SMTP_HOST) {
+    fatal.push("RESEND_API_KEY, BREVO_API_KEY, or SMTP_HOST is required in production");
+  }
 
   if (fatal.length > 0) {
     // eslint-disable-next-line no-console
